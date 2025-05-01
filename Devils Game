@@ -1,0 +1,601 @@
+import { useState, useEffect, useRef } from "react";
+import { Play, Repeat, ChevronRight, Clock, Award, TrendingUp, Eye, Zap, Shield, DollarSign } from "lucide-react";
+
+export default function DevilsGambit() {
+  const [score, setScore] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [multiplier, setMultiplier] = useState(1);
+  const [level, setLevel] = useState(1);
+  const [gameState, setGameState] = useState("choice"); // choice, minigame, result, gameOver
+  const [selectedDoor, setSelectedDoor] = useState(null);
+  const [reward, setReward] = useState(0);
+  const [devilQuote, setDevilQuote] = useState("");
+  const [doorAnimation, setDoorAnimation] = useState(false);
+  const [hint, setHint] = useState("");
+  const [doorPattern, setDoorPattern] = useState([]);
+  const [playerPattern, setPlayerPattern] = useState([]);
+  const [patternTime, setPatternTime] = useState(3);
+  const [gameTimer, setGameTimer] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [comboBonus, setComboBonus] = useState(0);
+  const [showPattern, setShowPattern] = useState(false);
+  const [doorValues, setDoorValues] = useState({risky: 0, safe: 0});
+  const [revealedInfo, setRevealedInfo] = useState(false);
+  const [skillPoints, setSkillPoints] = useState(0);
+  const [skillLevels, setSkillLevels] = useState({
+    insight: 1,   // Better hints
+    luck: 1,      // Better odds on risky door
+    timing: 1,    // More time in minigames
+    value: 1      // Better rewards
+  });
+  const [lastResults, setLastResults] = useState([]);
+  const [showCelebration, setShowCelebration] = useState(false);
+  
+  const timerRef = useRef(null);
+  
+  // Calculate door values based on various factors
+  useEffect(() => {
+    // Base values
+    let riskyBase = 100 * level;
+    let safeBase = 30 * level;
+    
+    // Apply skill modifiers
+    riskyBase *= (1 + (skillLevels.value - 1) * 0.2);
+    safeBase *= (1 + (skillLevels.value - 1) * 0.2);
+    
+    // Apply streak multiplier
+    const streakMultiplier = 1 + (streak * 0.1);
+    
+    // Calculate final values with some randomness
+    const riskyRandom = Math.floor(riskyBase * (0.9 + Math.random() * 0.4) * streakMultiplier);
+    const safeRandom = Math.floor(safeBase * (0.9 + Math.random() * 0.2) * streakMultiplier);
+    
+    // Special condition: Sometimes make safe door more valuable
+    const specialCondition = Math.random() < 0.3;
+    if (specialCondition) {
+      setDoorValues({
+        risky: Math.floor(riskyRandom * 0.7),
+        safe: Math.floor(safeRandom * 1.8)
+      });
+    } else {
+      setDoorValues({
+        risky: riskyRandom,
+        safe: safeRandom
+      });
+    }
+  }, [level, streak, skillLevels.value]);
+  
+  const redDevilQuotes = [
+    "Mut wird belohnt! Bist du bereit, alles zu riskieren?",
+    "Wer nicht wagt, der nicht gewinnt! Komm schon!",
+    "Hast du das Zeug zum Gewinner? Beweise es!",
+    "Die größten Belohnungen liegen jenseits der größten Gefahren!"
+  ];
+  
+  const blueDevilQuotes = [
+    "Sicherheit ist auch eine Tugend. Warum alles riskieren?",
+    "Klug ist, wer sein Vermögen schützt. Komm zu mir!",
+    "Nicht alles, was glänzt, ist Gold. Vertraue mir!",
+    "Warum das Schicksal herausfordern? Nimm den sicheren Weg!"
+  ];
+  
+  // Generate hints based on actual door values and insight skill
+  useEffect(() => {
+    const generateHint = () => {
+      const insightLevel = skillLevels.insight;
+      const doorDifference = doorValues.risky - doorValues.safe;
+      
+      // Better insight gives more accurate hints
+      if (insightLevel >= 3) {
+        // Very accurate hints at high levels
+        if (doorDifference > 50) {
+          return "Die rote Tür scheint heute besonders wertvoll zu sein...";
+        } else if (doorValues.safe > doorValues.risky) {
+          return "Der blaue Teufel lächelt heute besonders selbstsicher...";
+        } else {
+          return "Die Werte scheinen heute sehr ausgeglichen zu sein...";
+        }
+      } else if (insightLevel >= 2) {
+        // Somewhat accurate hints
+        if (doorDifference > 70) {
+          return "Der rote Teufel versteckt etwas Großes...";
+        } else if (doorValues.safe > doorValues.risky) {
+          return "Die sichere Tür wirkt heute besonders verlockend...";
+        } else {
+          return "Beide Teufel scheinen heute sehr überzeugt...";
+        }
+      } else {
+        // Basic hints that might be misleading
+        const hints = [
+          "Der rechte Teufel zuckt nervös mit den Augen...",
+          "Der linke Teufel scheint zu glühen...",
+          "Ein eisiger Wind kommt von der linken Tür...",
+          "Die rechte Tür flüstert leise..."
+        ];
+        return hints[Math.floor(Math.random() * hints.length)];
+      }
+    };
+    
+    setHint(generateHint());
+    const redQuote = redDevilQuotes[Math.floor(Math.random() * redDevilQuotes.length)];
+    setDevilQuote(redQuote);
+    
+    // Create a pattern for memory game
+    const patternLength = Math.min(3 + Math.floor(level / 2), 8);
+    const newPattern = [];
+    for (let i = 0; i < patternLength; i++) {
+      newPattern.push(Math.random() > 0.5 ? "left" : "right");
+    }
+    setDoorPattern(newPattern);
+    
+    // Reset player inputs
+    setPlayerPattern([]);
+    setPatternTime(Math.max(5 - Math.floor(level / 3), 2));
+    
+    // Add recent results
+    if (lastResults.length >= 5) {
+      setLastResults(prev => prev.slice(1));
+    }
+  }, [level, skillLevels.insight, doorValues]);
+  
+  // Use insight to reveal door info
+  const revealInfo = () => {
+    if (skillLevels.insight >= 2) {
+      setRevealedInfo(true);
+      setTimeout(() => setRevealedInfo(false), 2000);
+    }
+  };
+  
+  const chooseDoor = (door) => {
+    setSelectedDoor(door);
+    setDoorAnimation(true);
+    
+    // Start minigame sequence
+    setTimeout(() => {
+      setDoorAnimation(false);
+      setGameState("minigame");
+      
+      // Show pattern first
+      setShowPattern(true);
+      setTimeout(() => {
+        setShowPattern(false);
+        
+        // Then start the game timer based on skill level
+        const timeAllowed = 5 + (skillLevels.timing - 1) * 2;
+        setTimeLeft(timeAllowed);
+        
+        const timer = setInterval(() => {
+          setTimeLeft(prev => {
+            if (prev <= 1) {
+              clearInterval(timer);
+              evaluateGame(door, []);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        
+        timerRef.current = timer;
+      }, patternTime * 1000);
+    }, 1000);
+  };
+  
+  const addToPattern = (direction) => {
+    const updatedPattern = [...playerPattern, direction];
+    setPlayerPattern(updatedPattern);
+    
+    // Check if pattern is complete
+    if (updatedPattern.length >= doorPattern.length) {
+      clearInterval(timerRef.current);
+      evaluateGame(selectedDoor, updatedPattern);
+    }
+  };
+  
+  const evaluateGame = (door, finalPattern) => {
+    // Calculate accuracy of pattern matching
+    let correctInputs = 0;
+    for (let i = 0; i < doorPattern.length; i++) {
+      if (i < finalPattern.length && finalPattern[i] === doorPattern[i]) {
+        correctInputs++;
+      }
+    }
+    
+    const accuracy = doorPattern.length > 0 ? correctInputs / doorPattern.length : 0;
+    
+    // Calculate odds based on door choice, skill levels and accuracy
+    let winChance;
+    let pointsWon = 0;
+    let newStreak = streak;
+    
+    if (door === "risky") {
+      // Risky door: Base 40% + skill + accuracy bonuses
+      winChance = 0.4 + (skillLevels.luck - 1) * 0.05 + (accuracy * 0.3);
+      const win = Math.random() < winChance;
+      
+      if (win) {
+        pointsWon = doorValues.risky;
+        pointsWon = Math.floor(pointsWon * (1 + accuracy * 0.5)); // Accuracy bonus
+        setScore(score + pointsWon);
+        newStreak = streak + 1;
+        setStreak(newStreak);
+        
+        // Celebration for big wins
+        if (pointsWon > 150) {
+          setShowCelebration(true);
+          setTimeout(() => setShowCelebration(false), 1500);
+        }
+      } else {
+        // Don't reset all points, just lose some based on current level
+        const penalty = Math.floor(score * 0.3);
+        pointsWon = -penalty;
+        setScore(Math.max(0, score - penalty));
+        setStreak(0);
+        newStreak = 0;
+      }
+    } else {
+      // Safe door: Always win, but amount varies based on accuracy
+      pointsWon = doorValues.safe;
+      pointsWon = Math.floor(pointsWon * (0.7 + accuracy * 0.6)); // Accuracy affects reward
+      setScore(score + pointsWon);
+      newStreak = streak + 1;
+      setStreak(newStreak);
+    }
+    
+    // Calculate combo bonus for streaks
+    let bonus = 0;
+    if (newStreak >= 3) {
+      bonus = Math.floor(pointsWon * (newStreak * 0.05));
+      setScore(prev => prev + bonus);
+      setComboBonus(bonus);
+    }
+    
+    // Award skill points occasionally
+    if (Math.random() < 0.3 || level % 5 === 0) {
+      setSkillPoints(prev => prev + 1);
+    }
+    
+    // Update last results
+    setLastResults(prev => [...prev, {
+      level,
+      door,
+      points: pointsWon,
+      bonus,
+      accuracy: Math.floor(accuracy * 100)
+    }]);
+    
+    // Adjust multiplier based on streak
+    setMultiplier(1 + Math.min(newStreak * 0.1, 1));
+    
+    setReward(pointsWon);
+    setGameState("result");
+  };
+  
+  const upgradeSkill = (skill) => {
+    if (skillPoints > 0 && skillLevels[skill] < 5) {
+      setSkillPoints(prev => prev - 1);
+      setSkillLevels(prev => ({
+        ...prev,
+        [skill]: prev[skill] + 1
+      }));
+    }
+  };
+  
+  const nextLevel = () => {
+    setLevel(level + 1);
+    setGameState("choice");
+    setSelectedDoor(null);
+    setComboBonus(0);
+    setRevealedInfo(false);
+  };
+  
+  const restartGame = () => {
+    setScore(0);
+    setLevel(1);
+    setStreak(0);
+    setMultiplier(1);
+    setGameState("choice");
+    setSelectedDoor(null);
+    setComboBonus(0);
+    setRevealedInfo(false);
+    setLastResults([]);
+  };
+  
+  return (
+    <div className="flex flex-col items-center justify-center w-full h-full min-h-screen bg-gradient-to-b from-gray-900 to-purple-900 text-white font-sans">
+      {/* Header */}
+      <div className="my-4 text-center relative">
+        <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-red-500 to-blue-500">Devil's Gambit</h1>
+        
+        {/* Stats Bar */}
+        <div className="mt-2 flex items-center justify-center gap-6">
+          <div className="text-xl">Level: <span className="text-purple-300 font-bold">{level}</span></div>
+          <div className="text-xl">Score: <span className="text-yellow-400 font-bold">{score}</span></div>
+          <div className="flex items-center">
+            <TrendingUp size={16} className="text-green-400 mr-1" />
+            <span className={streak >= 3 ? "text-green-400 font-bold" : "text-gray-400"}>
+              Streak: {streak}x
+            </span>
+          </div>
+          {multiplier > 1 && (
+            <div className="text-pink-400 font-bold">
+              {multiplier.toFixed(1)}x
+            </div>
+          )}
+        </div>
+        
+        {/* Skill Points */}
+        <div className="mt-2 flex items-center justify-center">
+          <div className="flex items-center bg-purple-800 px-3 py-1 rounded-full">
+            <Award size={16} className="text-yellow-300 mr-1" />
+            <span className="text-yellow-300 font-bold">{skillPoints}</span>
+          </div>
+        </div>
+        
+        {gameState === "choice" && <div className="mt-2 text-sm text-gray-300 italic cursor-pointer" onClick={revealInfo}>{hint}</div>}
+        
+        {/* Skills Display */}
+        {gameState === "choice" && (
+          <div className="mt-4 flex justify-center gap-2">
+            <button 
+              onClick={() => upgradeSkill('insight')} 
+              className={`px-2 py-1 rounded flex items-center ${skillPoints > 0 && skillLevels.insight < 5 ? 'bg-purple-700 hover:bg-purple-600' : 'bg-gray-700'}`}
+              disabled={skillPoints === 0 || skillLevels.insight >= 5}
+            >
+              <Eye size={14} className="mr-1" />
+              <span className="text-xs">Einsicht {skillLevels.insight}/5</span>
+            </button>
+            <button 
+              onClick={() => upgradeSkill('luck')} 
+              className={`px-2 py-1 rounded flex items-center ${skillPoints > 0 && skillLevels.luck < 5 ? 'bg-purple-700 hover:bg-purple-600' : 'bg-gray-700'}`}
+              disabled={skillPoints === 0 || skillLevels.luck >= 5}
+            >
+              <Zap size={14} className="mr-1" />
+              <span className="text-xs">Glück {skillLevels.luck}/5</span>
+            </button>
+            <button 
+              onClick={() => upgradeSkill('timing')} 
+              className={`px-2 py-1 rounded flex items-center ${skillPoints > 0 && skillLevels.timing < 5 ? 'bg-purple-700 hover:bg-purple-600' : 'bg-gray-700'}`}
+              disabled={skillPoints === 0 || skillLevels.timing >= 5}
+            >
+              <Clock size={14} className="mr-1" />
+              <span className="text-xs">Zeit {skillLevels.timing}/5</span>
+            </button>
+            <button 
+              onClick={() => upgradeSkill('value')} 
+              className={`px-2 py-1 rounded flex items-center ${skillPoints > 0 && skillLevels.value < 5 ? 'bg-purple-700 hover:bg-purple-600' : 'bg-gray-700'}`}
+              disabled={skillPoints === 0 || skillLevels.value >= 5}
+            >
+              <DollarSign size={14} className="mr-1" />
+              <span className="text-xs">Wert {skillLevels.value}/5</span>
+            </button>
+          </div>
+        )}
+        
+        {/* Recent Results */}
+        {gameState === "choice" && lastResults.length > 0 && (
+          <div className="mt-3 flex justify-center">
+            <div className="flex gap-1">
+              {lastResults.map((result, idx) => (
+                <div key={idx} className={`w-4 h-8 rounded-sm ${result.points >= 0 ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Game Area */}
+      <div className="relative w-full max-w-3xl h-96 flex justify-center items-center">
+        {gameState === "choice" && (
+          <div className="flex w-full justify-around items-center">
+            {/* Left/Risky Devil */}
+            <div className="flex flex-col items-center">
+              <div className="w-32 h-48 flex items-center justify-center">
+                <div className={`relative w-24 h-40 bg-red-700 rounded-lg flex items-center justify-center ${revealedInfo ? 'animate-pulse' : ''}`}>
+                  <div className="absolute top-2 w-20 h-20 bg-red-900 rounded-full flex items-center justify-center">
+                    <div className="relative">
+                      <div className="w-4 h-4 bg-yellow-400 rounded-full absolute top-0 left-0"></div>
+                      <div className="w-4 h-4 bg-yellow-400 rounded-full absolute top-0 right-0"></div>
+                      <div className="w-6 h-3 bg-black rounded-full absolute top-6 left-2"></div>
+                    </div>
+                  </div>
+                  <div className="absolute bottom-4 w-14 h-6 bg-black rounded-full"></div>
+                  <div className="absolute -top-2 left-2 w-2 h-8 bg-red-600 transform rotate-20"></div>
+                  <div className="absolute -top-2 right-2 w-2 h-8 bg-red-600 transform -rotate-20"></div>
+                  
+                  {/* Revealed Value */}
+                  {revealedInfo && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+                      <div className="text-xl font-bold">{doorValues.risky}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="mt-2 text-sm max-w-xs text-center text-red-300">{redDevilQuotes[Math.floor(Math.random() * redDevilQuotes.length)]}</div>
+              <button
+                onClick={() => chooseDoor("risky")}
+                className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors duration-200"
+              >
+                Riskante Tür
+              </button>
+            </div>
+            
+            {/* Right/Safe Devil */}
+            <div className="flex flex-col items-center">
+              <div className="w-32 h-48 flex items-center justify-center">
+                <div className={`relative w-24 h-40 bg-blue-700 rounded-lg flex items-center justify-center ${revealedInfo ? 'animate-pulse' : ''}`}>
+                  <div className="absolute top-2 w-20 h-20 bg-blue-900 rounded-full flex items-center justify-center">
+                    <div className="relative">
+                      <div className="w-4 h-4 bg-yellow-400 rounded-full absolute top-0 left-0"></div>
+                      <div className="w-4 h-4 bg-yellow-400 rounded-full absolute top-0 right-0"></div>
+                      <div className="w-6 h-3 bg-black rounded-full absolute top-6 left-2"></div>
+                    </div>
+                  </div>
+                  <div className="absolute bottom-4 w-14 h-6 bg-black rounded-full"></div>
+                  <div className="absolute -top-2 left-2 w-2 h-8 bg-blue-600 transform rotate-20"></div>
+                  <div className="absolute -top-2 right-2 w-2 h-8 bg-blue-600 transform -rotate-20"></div>
+                  
+                  {/* Revealed Value */}
+                  {revealedInfo && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg">
+                      <div className="text-xl font-bold">{doorValues.safe}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="mt-2 text-sm max-w-xs text-center text-blue-300">{blueDevilQuotes[Math.floor(Math.random() * blueDevilQuotes.length)]}</div>
+              <button
+                onClick={() => chooseDoor("safe")}
+                className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors duration-200"
+              >
+                Sichere Tür
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Memory Minigame */}
+        {gameState === "minigame" && (
+          <div className="w-full flex flex-col items-center justify-center">
+            {showPattern ? (
+              <div className="text-2xl mb-4">Merke dir die Sequenz!</div>
+            ) : (
+              <>
+                <div className="text-2xl mb-2">Wiederhole das Muster</div>
+                <div className="text-lg mb-4">Zeit übrig: <span className="text-yellow-400">{timeLeft}</span>s</div>
+              </>
+            )}
+            
+            <div className="relative w-64 h-64 bg-gray-800 rounded-lg p-4 flex flex-col items-center justify-center">
+              {/* Show pattern sequence */}
+              {showPattern && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="flex gap-2 mb-4">
+                      {doorPattern.map((dir, idx) => (
+                        <div 
+                          key={idx} 
+                          className={`w-8 h-8 rounded-full ${dir === 'left' ? 'bg-red-500' : 'bg-blue-500'}`}
+                        ></div>
+                      ))}
+                    </div>
+                    <div className="text-sm text-gray-300">Wird angezeigt für {patternTime} Sekunden</div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Player input area */}
+              {!showPattern && (
+                <>
+                  <div className="flex gap-2 mb-6">
+                    {doorPattern.map((_, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`w-8 h-8 rounded-full ${
+                          idx < playerPattern.length 
+                            ? playerPattern[idx] === 'left' ? 'bg-red-500' : 'bg-blue-500' 
+                            : 'bg-gray-600'
+                        }`}
+                      ></div>
+                    ))}
+                  </div>
+                  
+                  <div className="flex gap-6 mt-4">
+                    <button
+                      onClick={() => addToPattern('left')}
+                      className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center"
+                    >
+                      Links
+                    </button>
+                    <button
+                      onClick={() => addToPattern('right')}
+                      className="w-16 h-16 rounded-full bg-blue-600 hover:bg-blue-700 flex items-center justify-center"
+                    >
+                      Rechts
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Result Screen */}
+        {gameState === "result" && (
+          <div className="w-full flex flex-col items-center justify-center">
+            <div className={`text-4xl font-bold mb-2 ${reward >= 0 ? 'text-green-400' : 'text-red-500'}`}>
+              {reward >= 0 ? `+${reward}` : reward} Punkte
+            </div>
+            
+            {comboBonus > 0 && (
+              <div className="text-xl text-pink-400 mb-2">
+                +{comboBonus} Combo Bonus!
+              </div>
+            )}
+            
+            <div className="text-xl mb-6">
+              {reward >= 0 
+                ? `Glückwunsch! Du hast gewonnen!` 
+                : `Du hast Punkte verloren!`}
+            </div>
+            
+            <button
+              onClick={nextLevel}
+              className="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg flex items-center transition-colors duration-200"
+            >
+              Nächstes Level <ChevronRight className="ml-2" size={18} />
+            </button>
+            <button
+              onClick={restartGame}
+              className="mt-4 px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg flex items-center transition-colors duration-200"
+            >
+              Neu starten <Repeat className="ml-2" size={16} />
+            </button>
+          </div>
+        )}
+      </div>
+      
+      {/* Door Animation */}
+      {doorAnimation && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="relative w-32 h-64 bg-gradient-to-b from-purple-800 to-purple-600 rounded-t-lg flex items-center justify-center">
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+              <div className="w-4 h-4 bg-yellow-400 rounded-full animate-ping"></div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Celebration Animation */}
+      {showCelebration && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="relative w-full h-full">
+            {[...Array(20)].map((_, i) => (
+              <div 
+                key={i}
+                className="absolute w-4 h-4 rounded-full bg-yellow-400 animate-ping opacity-70"
+                style={{
+                  top: `${Math.random() * 100}%`,
+                  left: `${Math.random() * 100}%`,
+                  animationDuration: `${0.8 + Math.random() * 1}s`,
+                  animationDelay: `${Math.random() * 0.5}s`
+                }}
+              ></div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Start Button */}
+      {gameState === "choice" && level === 1 && score === 0 && (
+        <div className="mt-8">
+          <button
+            onClick={() => {}}
+            className="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg flex items-center transition-colors duration-200"
+          >
+            <Play className="mr-2" size={20} /> Spielen
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
